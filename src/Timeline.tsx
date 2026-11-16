@@ -33,7 +33,7 @@ export function Timeline({ alloc, start, hours, color, teams, claimed, infos, co
     return alloc.warehouses.filter(w => byWh.has(w.name)).map(w => {
       const info = infos?.find(i => i.name === w.name)
       const cells = byWh.get(w.name)!
-      let max = info ? creditsPerHour(info.size) : NaN
+      let max = info ? creditsPerHour(info.size, info.type) : NaN
       if (!Number.isFinite(max)) max = Math.max(...[...cells.values()].map(c => Math.max(c.metered, sumv(c.query)))) || 1
       return { name: w.name, info, cells, max }
     })

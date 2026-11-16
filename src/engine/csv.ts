@@ -1,7 +1,7 @@
 import type { DailyRow, Dataset, MeterRow, UsageRow, WarehouseInfo } from './types.ts'
 
 /** RFC 4180 CSV (quotes, escaped quotes, CRLF, newlines in quotes). Also returns the line each record starts on. */
-export function parseCsv(text: string): { rows: string[][]; lines: number[] } {
+export function parseCsv(text: string): { rows: string[][]; lines: number[]; delim: string } {
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
   const delim = sniffDelimiter(text)
   const rows: string[][] = []
@@ -37,7 +37,7 @@ export function parseCsv(text: string): { rows: string[][]; lines: number[] } {
     row.push(field)
     if (row.length > 1 || row[0] !== '') { rows.push(row); lines.push(rowLine) }
   }
-  return { rows, lines }
+  return { rows, lines, delim }
 }
 
 function sniffDelimiter(text: string): string {
@@ -63,6 +63,12 @@ export function parseTime(raw: string): number {
     }
     return t
   }
+  // Snowflake's older TIMESTAMP_OUTPUT_FORMAT, still set on many accounts: Thu, 01 Oct 2026 00:00:00 -0700
+  const r = s.match(/^[a-z]{3},?\s+(\d{1,2})\s+([a-z]{3})\s+(\d{4})\s+(\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?)\s*(Z|UTC|[+-]\d{2}:?\d{2})?$/i)
+  if (r) {
+    const mo = MONTHS.indexOf(r[2].toLowerCase()) + 1
+    if (mo > 0) return parseTime(`${r[3]}-${String(mo).padStart(2, '0')}-${r[1].padStart(2, '0')} ${r[4]}${r[5] ? ' ' + r[5] : ''}`)
+  }
   // US style from spreadsheets: 10/1/2026 7:00(:00)( AM)
   const u = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i)
   if (u) {
@@ -73,12 +79,17 @@ export function parseTime(raw: string): number {
   return NaN
 }
 
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
 export const HOUR = 3600_000
 export const hourOf = (t: number) => Math.floor(t / HOUR) * HOUR
 export const dayOf = (t: number) => new Date(t).toISOString().slice(0, 10)
 
-export function parseNum(raw: string): number {
-  const s = raw.trim().replace(/[,\s$]/g, '')
+/** decimalComma: the file came from a spreadsheet in a locale that writes 1.234,5 (semicolon-separated CSV). */
+export function parseNum(raw: string, decimalComma = false): number {
+  let s = raw.trim()
+  if (decimalComma && s.includes(',')) s = s.replace(/\./g, '').replace(',', '.')
+  s = s.replace(/[,\s$]/g, '')
   if (s === '' || /^null$/i.test(s)) return NaN
   return Number(s)
 }
@@ -137,6 +148,7 @@ export const KINDS: Record<Kind, { title: string; view: string; fields: FieldSpe
       { key: 'autoSuspend', label: 'Auto-suspend (s)', type: 'num', aliases: ['auto_suspend'] },
       { key: 'owner', label: 'Owner role', type: 'str', aliases: ['owner'] },
       { key: 'maxClusters', label: 'Max clusters', type: 'num', aliases: ['max_cluster_count'] },
+      { key: 'type', label: 'Type', type: 'str', aliases: ['type', 'warehouse_type'] },
     ],
   },
 }
@@ -177,7 +189,7 @@ export interface Issue { line: number; message: string }
 export interface Validated<T> { rows: T[]; issues: Issue[]; skipped: number; total: number }
 
 /** Turns raw CSV records into typed rows, collecting a line-numbered report of every problem. */
-export function validate(kind: Kind, csv: { rows: string[][]; lines: number[] }, map: Mapping): Validated<MeterRow | UsageRow | DailyRow | WarehouseInfo> {
+export function validate(kind: Kind, csv: { rows: string[][]; lines: number[]; delim?: string }, map: Mapping): Validated<MeterRow | UsageRow | DailyRow | WarehouseInfo> {
   const fields = KINDS[kind].fields
   const issues: Issue[] = []
   const out: Record<string, unknown>[] = []
@@ -199,7 +211,7 @@ export function validate(kind: Kind, csv: { rows: string[][]; lines: number[] },
         obj[f.key] = f.type === 'time' ? hourOf(t) : dayOf(t)
         continue
       }
-      const n = parseNum(raw)
+      const n = parseNum(raw, csv.delim === ';')
       if (Number.isNaN(n)) {
         if (raw.trim() && !/^null$/i.test(raw.trim())) { issues.push({ line, message: `${f.label} "${raw.slice(0, 40)}" is not a number` }); bad = true }
         else if (f.required) { issues.push({ line, message: `${f.label} is empty` }); bad = true }

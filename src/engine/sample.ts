@@ -236,7 +236,7 @@ export function toSnowflakeCsvs(ds: Dataset): Record<'metering' | 'attribution' 
       ...ds.usage.map(u => [ts(u.hour), u.warehouse, u.user, u.role, u.tag, u.database, u.queries, u.execMs, u.credits, u.qas, u.cloud])]),
     daily: toCsv([['USAGE_DATE', 'SERVICE_TYPE', 'CREDITS_USED_COMPUTE', 'CREDITS_USED_CLOUD_SERVICES', 'CREDITS_ADJUSTMENT_CLOUD_SERVICES', 'CREDITS_BILLED'],
       ...ds.daily.map(d => [d.day, d.service, d.compute, d.cloud, d.adjustment, d.billed])]),
-    warehouses: toCsv([['name', 'size', 'auto_suspend', 'owner', 'max_cluster_count'],
-      ...ds.warehouses.map(w => [w.name, w.size, w.autoSuspend ?? '', w.owner ?? '', w.maxClusters ?? 1])]),
+    warehouses: toCsv([['name', 'type', 'size', 'auto_suspend', 'owner', 'max_cluster_count'],
+      ...ds.warehouses.map(w => [w.name, w.type ?? 'STANDARD', w.size, w.autoSuspend ?? 'null', w.owner ?? '', w.maxClusters ?? 1])]),
   }
 }

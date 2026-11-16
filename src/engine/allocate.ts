@@ -274,7 +274,11 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
           for (const [t, v] of Object.entries(cell.query)) add(cw, t, v)
           for (const [t, v] of Object.entries(cell.idle)) add(cw, t, v)
         }
-        if (!Object.keys(cw).length) cw[owner ?? UNASSIGNED] = 1
+        if (!Object.keys(cw).length) {
+          // e.g. the CLOUD_SERVICES_ONLY pseudo-warehouse, or metadata work in an hour with no query rows.
+          cw[owner ?? UNASSIGNED] = 1
+          if (!owner) idleFix.set(w, (idleFix.get(w) ?? 0) + C)
+        }
         const rec = rawCloudByDay.get(day) ?? {}
         for (const [t, v] of Object.entries(split(C, cw))) { add(rec, `${t}\u0001${w}`, v) }
         rawCloudByDay.set(day, rec)

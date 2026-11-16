@@ -47,6 +47,8 @@ export interface WarehouseInfo {
   autoSuspend: number | null
   owner?: string
   maxClusters?: number
+  /** STANDARD, SNOWPARK-OPTIMIZED, ADAPTIVE or INTERACTIVE. Missing in projects imported before this column was read. */
+  type?: string
 }
 
 export interface Dataset {

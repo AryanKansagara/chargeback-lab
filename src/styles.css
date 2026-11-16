@@ -699,3 +699,4 @@ table.data tbody tr:hover { background: var(--bg-2); }
 .docs table.data td { white-space: normal; min-width: 120px; }
 .docs table.data td:nth-child(2) { min-width: 260px; }
 .onboard-card .row + p { margin-top: 14px; }
+.import-all { margin: 14px 0 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; }

@@ -23,8 +23,13 @@ export function sizeIndex(raw: string): number {
   return SIZES.indexOf((alias[s] ?? s) as (typeof SIZES)[number])
 }
 
-/** Credits per hour for a standard warehouse of this size (X-Small = 1, doubling each step). */
-export const creditsPerHour = (size: string) => { const i = sizeIndex(size); return i < 0 ? NaN : 2 ** i }
+const isSnowpark = (type?: string) => /snowpark/i.test(type ?? '')
+
+/**
+ * Credits per hour for a warehouse of this size: X-Small = 1, doubling each step.
+ * Snowpark-optimized warehouses bill 1.5x the standard rate (Snowflake Service Consumption Table).
+ */
+export const creditsPerHour = (size: string, type?: string) => { const i = sizeIndex(size); return i < 0 ? NaN : 2 ** i * (isSnowpark(type) ? 1.5 : 1) }
 
 // ---------- Recommendations ----------
 
@@ -51,7 +56,9 @@ export function recommend(alloc: Allocation, infos: WarehouseInfo[]): Recommenda
   for (const w of alloc.warehouses) {
     const info = infos.find(i => i.name.toUpperCase() === w.name.toUpperCase())
     if (!info || w.metered <= 0) continue
-    const rate = creditsPerHour(info.size)
+    // Adaptive and interactive warehouses size and suspend themselves; ALTER ... SIZE / AUTO_SUSPEND advice does not apply.
+    if (/adaptive|interactive/i.test(info.type ?? '')) continue
+    const rate = creditsPerHour(info.size, info.type)
     const S = info.autoSuspend ?? 0
     let idleAfter = w.idle
     if (w.idle > 0 && (S === 0 || S > TARGET_SUSPEND * 1.5) && w.idlePct > 0.12) {
@@ -84,7 +91,8 @@ export function recommend(alloc: Allocation, infos: WarehouseInfo[]): Recommenda
     const si = sizeIndex(info.size)
     const avgExec = w.queries ? w.execMs / w.queries : Infinity
     const util = w.metered ? w.attributed / w.metered : 1
-    if (si >= 2 && avgExec < 2000 && util < 0.45 && (info.maxClusters ?? 1) <= 1 && idleAfter > 0.5) {
+    // Snowpark-optimized warehouses start at Medium, so a Medium one has no smaller size to move to.
+    if (si >= (isSnowpark(info.type) ? 3 : 2) && avgExec < 2000 && util < 0.45 && (info.maxClusters ?? 1) <= 1 && idleAfter > 0.5) {
       const saved = idleAfter / 2
       out.push({
         warehouse: w.name, kind: 'size',

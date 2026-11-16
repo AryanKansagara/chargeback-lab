@@ -65,7 +65,7 @@ ORDER BY usage_date, service_type;`
 
 const Q4 = `SHOW WAREHOUSES;
 
-SELECT "name", "size", "auto_suspend", "owner", "max_cluster_count"
+SELECT "name", "type", "size", "auto_suspend", "owner", "max_cluster_count"
 FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));`
 
 const SNOWSQL = `snowsql -c finops -f metering.sql \\
@@ -155,6 +155,7 @@ export default function Docs() {
         </ol>
         <Code code={SNOWSQL} label="shell" />
         <p>Then open a project, go to <b>Data</b>, and drop all four files at once. Each file&rsquo;s type is detected from its header row and the columns are mapped automatically; you can re-map any column, and every rejected row is listed with its line number before anything is imported. Re-importing a month replaces that month only.</p>
+        <p>Files opened and re-saved in a spreadsheet also work: US dates (<code>10/1/2026 7:00 PM</code>), the older Snowflake timestamp format (<code>Thu, 01 Oct 2026 00:00:00 -0700</code>), epoch seconds, and semicolon-separated files with decimal commas (<code>0,5</code>). Empty cells and <code>NULL</code> count as zero in optional columns.</p>
       </section>
 
       <section id="math">
@@ -175,8 +176,9 @@ export default function Docs() {
       <section id="pricing">
         <h2>Pricing assumptions</h2>
         <p><b>As of November 2026.</b> The default is <b>$3.00 per credit</b>, roughly the on-demand list price for Enterprise edition in AWS US East. Standard is lower and Business Critical higher, and prices vary by cloud and region. Capacity contracts are usually discounted. Set your contract rate on each project; the price is stored with every snapshot.</p>
-        <p>Recommendations assume standard warehouses, where credits per hour double with each size step:</p>
+        <p>Credits per hour for a standard warehouse double with each size step:</p>
         <div className="size-table">{SIZE_LABEL.slice(0, 8).map((l, i) => <div key={l}><span>{l}</span><b>{2 ** i}</b></div>)}</div>
+        <p>Snowpark-optimized warehouses bill 1.5&times; these rates and start at Medium, so no downsize is suggested below that. Adaptive and interactive warehouses manage their own size and suspension, so they get no recommendations. Source: Snowflake&rsquo;s <a href="https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf" target="_blank" rel="noreferrer">Service Consumption Table</a> and the <a href="https://docs.snowflake.com/en/sql-reference/sql/show-warehouses" target="_blank" rel="noreferrer">SHOW WAREHOUSES</a> reference, checked 15 November 2026.</p>
         <p className="muted small">A resumed warehouse is billed for at least 60 seconds, then per second. Auto-suspend savings are estimated assuming each idle stretch runs the full auto-suspend window and the workload does not change; the assumptions are listed next to each recommendation.</p>
       </section>
 

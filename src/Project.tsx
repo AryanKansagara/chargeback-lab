@@ -289,7 +289,7 @@ function Overview({ project, sliced, alloc, month, color, teams, onTab }: TabPro
 }
 
 export function fixLabel(f: Allocation['fixes'][number]) {
-  if (f.kind === 'idle') return `Idle on ${f.subject.warehouse} with no owner`
+  if (f.kind === 'idle') return `Unclaimed idle or cloud services on ${f.subject.warehouse} (no owner)`
   if (f.kind === 'serverless') return `Serverless ${f.subject.service}`
   const s = f.subject
   const bits = [s.user && `user ${s.user}`, s.role && `role ${s.role}`, s.tag ? `tag ${s.tag.length > 30 ? s.tag.slice(0, 28) + '…' : s.tag}` : 'no tag'].filter(Boolean)

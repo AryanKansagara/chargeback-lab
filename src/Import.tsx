@@ -43,28 +43,35 @@ export default function DataTab({ project, ds, update, reload, months }: { proje
     setBusy(false)
   }
 
-  const commit = async (p: Pending, rows: unknown[], skipped: number) => {
-    if (!p.kind) return
-    let target = project
-    if (project.sampleId) {
-      target = await createBlankProject('My Snowflake account')
-    }
-    const base = project.sampleId ? EMPTY : data
-    const merged = mergeRows(base, p.kind, rows)
+  // One read-merge-write for every file, so importing several files back to back cannot overwrite each other.
+  const commit = async (items: Pending[]) => {
+    const ready = items.flatMap(p => {
+      if (!p.kind) return []
+      const v = validate(p.kind, p.csv, p.map)
+      return v.rows.length ? [{ p, kind: p.kind, rows: v.rows as unknown[], skipped: v.skipped }] : []
+    })
+    if (!ready.length) return
+    const target = project.sampleId ? await createBlankProject('My Snowflake account') : project
+    let merged = project.sampleId ? EMPTY : data
+    for (const r of ready) merged = mergeRows(merged, r.kind, r.rows)
     await putData(target.id, merged)
-    const meta = { id: uuid(), kind: p.kind, fileName: p.name, rows: rows.length, skipped, at: Date.now() }
+    const metas = ready.map(r => ({ id: uuid(), kind: r.kind, fileName: r.p.name, rows: r.rows.length, skipped: r.skipped, at: Date.now() }))
+    const done = new Set(ready.map(r => r.p.id))
+    setPending(x => x.filter(y => !done.has(y.id)))
+    const rows = ready.reduce((a, r) => a + r.rows.length, 0)
+    const skipped = ready.reduce((a, r) => a + r.skipped, 0)
     if (project.sampleId) {
-      await saveProject({ ...target, imports: [meta] })
-      setPending(x => x.filter(y => y.id !== p.id))
-      toast(`Imported ${rows.length.toLocaleString()} rows into a new project (samples are read-only).`, { tone: 'ok' })
+      await saveProject({ ...target, imports: metas })
+      toast(`Imported ${rows.toLocaleString()} rows into a new project (samples are read-only).`, { tone: 'ok' })
       go(`/app/p/${target.id}/data`)
       return
     }
-    update({ imports: [...project.imports, meta], dataMissing: false })
-    setPending(x => x.filter(y => y.id !== p.id))
+    update({ imports: [...project.imports, ...metas], dataMissing: false })
     reload()
-    toast(`Imported ${rows.length.toLocaleString()} ${KINDS[p.kind].title.toLowerCase()} rows${skipped ? `, skipped ${skipped}` : ''}`, { tone: 'ok' })
+    const what = ready.length === 1 ? `${KINDS[ready[0].kind].title.toLowerCase()} rows` : `rows from ${ready.length} files`
+    toast(`Imported ${rows.toLocaleString()} ${what}${skipped ? `, skipped ${skipped.toLocaleString()}` : ''}`, { tone: 'ok' })
   }
+  const importable = useMemo(() => pending.filter(p => p.kind && validate(p.kind, p.csv, p.map).rows.length > 0), [pending])
 
   const counts = { meter: data.meter.length, usage: data.usage.length, daily: data.daily.length, warehouses: data.warehouses.length }
 
@@ -95,7 +102,13 @@ export default function DataTab({ project, ds, update, reload, months }: { proje
           <input ref={input} type="file" accept=".csv,.tsv,.txt,text/csv" multiple hidden onChange={e => { if (e.target.files) void readFiles(e.target.files); e.target.value = '' }} />
           {busy && <p role="status"><span className="spinner" /> Reading files</p>}
         </div>
-        {pending.map(p => <PendingCard key={p.id} p={p} onChange={np => setPending(x => x.map(y => y.id === p.id ? np : y))} onCancel={() => setPending(x => x.filter(y => y.id !== p.id))} onCommit={commit} />)}
+        {pending.length > 1 && (
+          <div className="row between wrap gap-sm import-all">
+            <span className="small">{importable.length} of {pending.length} files ready. Rows with problems are skipped and listed in each file&rsquo;s report.</span>
+            <button type="button" className="btn primary sm" disabled={!importable.length} onClick={() => void commit(importable)}>Import all {importable.length} files</button>
+          </div>
+        )}
+        {pending.map(p => <PendingCard key={p.id} p={p} onChange={np => setPending(x => x.map(y => y.id === p.id ? np : y))} onCancel={() => setPending(x => x.filter(y => y.id !== p.id))} onCommit={() => void commit([p])} />)}
       </div>
 
       <div className="panel">
@@ -144,7 +157,7 @@ export default function DataTab({ project, ds, update, reload, months }: { proje
   )
 }
 
-function PendingCard({ p, onChange, onCancel, onCommit }: { p: Pending; onChange(p: Pending): void; onCancel(): void; onCommit(p: Pending, rows: unknown[], skipped: number): void }) {
+function PendingCard({ p, onChange, onCancel, onCommit }: { p: Pending; onChange(p: Pending): void; onCancel(): void; onCommit(): void }) {
   const headers = p.csv.rows[0]
   const first = p.csv.rows[1] ?? []
   const v = useMemo(() => p.kind ? validate(p.kind, p.csv, p.map) : null, [p.kind, p.csv, p.map])
@@ -191,7 +204,7 @@ function PendingCard({ p, onChange, onCancel, onCommit }: { p: Pending; onChange
           )}
           <div className="row end gap-sm">
             <button type="button" className="btn ghost sm" onClick={onCancel}>Discard</button>
-            <button type="button" className="btn primary sm" disabled={!v || !v.rows.length} onClick={() => v && onCommit(p, v.rows, v.skipped)}>Import {v?.rows.length.toLocaleString()} rows</button>
+            <button type="button" className="btn primary sm" disabled={!v || !v.rows.length} onClick={onCommit}>Import {v?.rows.length.toLocaleString()} rows</button>
           </div>
         </>
       )}
