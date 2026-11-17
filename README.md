@@ -29,4 +29,4 @@ npm test
 npm run build
 ```
 
-Independent project, not affiliated with Snowflake.
+
