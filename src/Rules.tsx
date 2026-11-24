@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { isPseudo, type Allocation, type FixItem } from './engine/allocate.ts'
 import { compileRegex, FIELD_LABEL, matchRule, resolve, type Subject } from './engine/rules.ts'
+import { own } from './engine/dict.ts'
 import { UNMAPPED, type Config, type Dataset, type Rule, type RuleField, type RuleOp } from './engine/types.ts'
 import { fixLabel } from './Project.tsx'
 import { uuid, type Project } from './store.ts'
@@ -154,7 +155,7 @@ export default function Rules({ project, ds, sliced, alloc, color, teams, setCon
             {whNames.map(w => (
               <label className="owner-row" key={w}>
                 <span className="mono">{w}</span>
-                <input list="team-list" placeholder="No owner" value={cfg.owners[w] ?? ''} onChange={e => { const owners = { ...cfg.owners, [w]: e.target.value }; if (!e.target.value) delete owners[w]; setConfig({ owners }) }} />
+                <input list="team-list" placeholder="No owner" value={own(cfg.owners, w) ?? ''} onChange={e => { const owners = { ...cfg.owners, [w]: e.target.value }; if (!e.target.value) delete owners[w]; setConfig({ owners }) }} />
               </label>
             ))}
           </div>

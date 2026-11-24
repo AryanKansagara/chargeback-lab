@@ -11,7 +11,7 @@ export default function Statements({ id }: { id: string }) {
   const q = new URLSearchParams(location.search)
   const month = q.get('m') && months.includes(q.get('m')!) ? q.get('m')! : ds ? defaultMonth(ds, months) : null
   const { alloc } = useAllocation(ds, project?.config, month)
-  const [only, setOnly] = useState<string>('all')
+  const [only, setOnly] = useState<string | null>(null)
   const teams = useMemo(() => project ? teamOrder(project.config, alloc) : [], [project, alloc])
   const color = teamColors(teams)
   useEffect(() => { if (project && month) document.title = `Statements ${month} · ${project.name}` }, [project?.name, month])
@@ -24,7 +24,7 @@ export default function Statements({ id }: { id: string }) {
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
   const days = Array.from({ length: lastDay }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`)
   const bud = budgets(alloc, project.config, month)
-  const list = alloc.teams.filter(t => only === 'all' || t.team === only)
+  const list = alloc.teams.filter(t => only === null || t.team === only)
   const r = alloc.recon
   const period = `${fmtMonth(month).split(' ')[0]} 1–${lastDay}, ${y} (UTC)`
 
@@ -33,7 +33,7 @@ export default function Statements({ id }: { id: string }) {
       <div className="statement-toolbar no-print">
         <Link href={`/app/p/${id}?m=${month}`} className="btn ghost sm">&larr; {project.name}</Link>
         <label className="ctl inline"><span>Month</span><select value={month} onChange={e => go(`${location.pathname}?m=${e.target.value}`, { replace: true })}>{months.map(mm => <option key={mm} value={mm}>{fmtMonth(mm)}</option>)}</select></label>
-        <label className="ctl inline"><span>Team</span><select value={only} onChange={e => setOnly(e.target.value)}><option value="all">All teams ({alloc.teams.length} pages)</option>{alloc.teams.map(t => <option key={t.team} value={t.team}>{t.team}</option>)}</select></label>
+        <label className="ctl inline"><span>Team</span><select value={only ?? ""} onChange={e => setOnly(e.target.value === "" ? null : e.target.value)}><option value="">All teams ({alloc.teams.length} pages)</option>{alloc.teams.map(t => <option key={t.team} value={t.team}>{t.team}</option>)}</select></label>
         <span className="grow" />
         <ThemeToggle />
         <button type="button" className="btn ghost sm" onClick={() => download(`chargeback-${month}.csv`, financeCsv(alloc, month))}>Finance CSV</button>

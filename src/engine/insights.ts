@@ -1,5 +1,6 @@
 import { allocate, filterMonth, isPseudo, type Allocation } from './allocate.ts'
 import { dayOf } from './csv.ts'
+import { own } from './dict.ts'
 import { resolve } from './rules.ts'
 import type { Config, Dataset, IdleMethod, WarehouseInfo } from './types.ts'
 
@@ -168,7 +169,7 @@ export function budgets(alloc: Allocation, cfg: Config, month: string): BudgetSt
   const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate()
   const monthDays = alloc.days.filter(d => d.startsWith(month))
   const last = monthDays.length ? Number(monthDays[monthDays.length - 1].slice(8)) : 0
-  return alloc.teams.filter(t => !isPseudo(t.team) || cfg.budgets[t.team]).map(t => {
+  return alloc.teams.filter(t => !isPseudo(t.team) || own(cfg.budgets, t.team)).map(t => {
     const daily = Array.from({ length: daysInMonth }, (_, i) => (t.byDay[`${month}-${String(i + 1).padStart(2, '0')}`] ?? 0) * alloc.price)
     const burn: (number | null)[] = []
     let acc = 0
@@ -177,7 +178,7 @@ export function budgets(alloc: Allocation, cfg: Config, month: string): BudgetSt
     const recent = daily.slice(Math.max(0, last - 7), last)
     const pace = recent.length ? sum(recent) / recent.length : 0
     const forecast = spent + pace * (daysInMonth - last)
-    const budget = cfg.budgets[t.team] ?? 0
+    const budget = own(cfg.budgets, t.team) ?? 0
     const status: BudgetStatus['status'] = !budget ? 'no-budget' : spent > budget ? 'over' : forecast > budget ? 'at-risk' : 'on-track'
     return { team: t.team, budget, spent, forecast, daysInMonth, daysElapsed: last, burn, status }
   })
@@ -323,7 +324,7 @@ export interface TeamChange {
 const biggest = (a: Record<string, number>, b: Record<string, number>) => {
   let best: { name: string; delta: number } | null = null
   for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
-    const d = (b[k] ?? 0) - (a[k] ?? 0)
+    const d = (own(b, k) ?? 0) - (own(a, k) ?? 0)
     if (!best || Math.abs(d) > Math.abs(best.delta)) best = { name: k, delta: d }
   }
   return best && Math.abs(best.delta) > 1e-9 ? best : null

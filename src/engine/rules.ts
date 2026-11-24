@@ -1,4 +1,5 @@
 import { UNMAPPED, type Rule, type RuleField } from './types.ts'
+import { own } from './dict.ts'
 
 export interface Subject {
   tag?: string
@@ -48,7 +49,7 @@ function readField(rule: Rule, s: Subject): string | undefined {
       let cur: unknown = obj
       for (const part of rule.key.split('.')) {
         if (!cur || typeof cur !== 'object') return undefined
-        cur = (cur as Record<string, unknown>)[part]
+        cur = own(cur as Record<string, unknown>, part)
       }
       return cur === undefined || cur === null || typeof cur === 'object' ? undefined : String(cur)
     }
