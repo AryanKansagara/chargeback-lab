@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { allocate, filterMonth, isPseudo } from './engine/allocate.ts'
 import { ANOMALY_FLOOR, ANOMALY_RATIO, anomalies, budgets, compare, recommend, tagAdoption, TARGET_SUSPEND } from './engine/insights.ts'
+import { put } from './engine/dict.ts'
 import { BurnChart, DayBars, DeltaBar } from './charts.tsx'
 import { METHODS } from './projectData.ts'
 import type { Tab, TabProps } from './Project.tsx'
@@ -131,7 +132,7 @@ function Budgets({ project, ds, months, color, setConfig }: TabProps) {
   const list = useMemo(() => budgets(alloc, cfg, current), [alloc, cfg, current])
   const setBudget = (team: string, v: number) => {
     const b = { ...cfg.budgets }
-    if (v > 0) b[team] = v
+    if (v > 0) put(b, team, v)
     else delete b[team]
     setConfig({ budgets: b })
   }

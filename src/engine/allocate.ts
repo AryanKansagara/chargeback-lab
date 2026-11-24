@@ -1,4 +1,5 @@
 import { dayOf, HOUR } from './csv.ts'
+import { dict, own, put } from './dict.ts'
 import { resolve, type Subject } from './rules.ts'
 import { UNASSIGNED, UNMAPPED, type Config, type Dataset, type IdleMethod, type UsageRow } from './types.ts'
 
@@ -83,7 +84,7 @@ export interface Allocation {
 /** Floating-point dust, not a real amount of credits. */
 const NEGLIGIBLE = 1e-9
 const WAREHOUSE_SERVICES = new Set(['WAREHOUSE_METERING', 'WAREHOUSE_METERING_READER'])
-const add = (o: Record<string, number>, k: string, v: number) => { if (v) o[k] = (o[k] ?? 0) + v }
+const add = (o: Record<string, number>, k: string, v: number) => { if (v) put(o, k, (own(o, k) ?? 0) + v) }
 const sum = (o: Record<string, number>) => Object.values(o).reduce((a, b) => a + b, 0)
 
 interface Agg { credits: number; qas: number; exec: number; cloud: number; queries: number }
@@ -92,22 +93,22 @@ interface Agg { credits: number; qas: number; exec: number; cloud: number; queri
 export function split(amount: number, weights: Record<string, number>): Record<string, number> {
   const total = sum(weights)
   const out: Record<string, number> = {}
-  for (const [k, w] of Object.entries(weights)) if (w > 0) out[k] = (amount * w) / total
+  for (const [k, w] of Object.entries(weights)) if (w > 0) put(out, k, (amount * w) / total)
   return out
 }
 
 /** The weights each idle-split method uses for one warehouse-hour. Empty means nobody to charge. */
 export function idleWeights(method: IdleMethod, teams: Map<string, Agg>, owner: string | undefined): Record<string, number> {
   const w: Record<string, number> = {}
-  if (method === 'owner') { if (owner) w[owner] = 1; return w }
+  if (method === 'owner') { if (owner) put(w, owner, 1); return w }
   for (const [team, a] of teams) {
-    if (method === 'credits') w[team] = a.credits
-    else if (method === 'exec') w[team] = a.exec
-    else if (a.credits > 0 || a.queries > 0) w[team] = 1
+    if (method === 'credits') put(w, team, a.credits)
+    else if (method === 'exec') put(w, team, a.exec)
+    else if (a.credits > 0 || a.queries > 0) put(w, team, 1)
   }
   // Execution time can be missing from an export; fall back to credits rather than dropping the hour.
-  if (method === 'exec' && sum(w) <= 0) for (const [team, a] of teams) w[team] = a.credits
-  for (const k of Object.keys(w)) if (!(w[k] > 0)) delete w[k]
+  if (method === 'exec' && sum(w) <= 0) for (const [team, a] of teams) put(w, team, a.credits)
+  for (const [k, v] of Object.entries(w)) if (!(v > 0)) delete w[k]
   return w
 }
 
@@ -144,13 +145,13 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
   const teamMap = new Map<string, TeamTotal>()
   const team = (name: string): TeamTotal => {
     let t = teamMap.get(name)
-    if (!t) teamMap.set(name, t = { team: name, query: 0, qas: 0, idle: 0, cloud: 0, serverless: 0, total: 0, usd: 0, byWarehouse: {}, byDay: {}, byUser: {}, byService: {} })
+    if (!t) teamMap.set(name, t = { team: name, query: 0, qas: 0, idle: 0, cloud: 0, serverless: 0, total: 0, usd: 0, byWarehouse: dict(), byDay: dict(), byUser: dict(), byService: dict() })
     return t
   }
   const whMap = new Map<string, WarehouseTotal>()
   const wh = (name: string): WarehouseTotal => {
     let w = whMap.get(name)
-    if (!w) whMap.set(name, w = { name, metered: 0, attributed: 0, idle: 0, over: 0, unmetered: 0, idlePct: 0, cloud: 0, idleByTeam: {}, activeHours: 0, idleOnlyHours: 0, meteredHours: 0, queries: 0, execMs: 0, byDay: {} })
+    if (!w) whMap.set(name, w = { name, metered: 0, attributed: 0, idle: 0, over: 0, unmetered: 0, idlePct: 0, cloud: 0, idleByTeam: dict(), activeHours: 0, idleOnlyHours: 0, meteredHours: 0, queries: 0, execMs: 0, byDay: dict() })
     return w
   }
   const byWh = (t: TeamTotal, w: string) => (t.byWarehouse[w] ??= { query: 0, idle: 0, cloud: 0 })
@@ -176,7 +177,7 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
     let a = cell.get(t)
     if (!a) cell.set(t, a = { credits: 0, qas: 0, exec: 0, cloud: 0, queries: 0 })
     a.credits += u.credits; a.qas += u.qas; a.exec += u.execMs; a.cloud += u.cloud; a.queries += u.queries
-    if (u.qas) { const d = dayOf(u.hour); const rec = qasByDayTeam.get(d) ?? {}; add(rec, t, u.qas); qasByDayTeam.set(d, rec) }
+    if (u.qas) { const d = dayOf(u.hour); const rec = qasByDayTeam.get(d) ?? dict<number>(); add(rec, t, u.qas); qasByDayTeam.set(d, rec) }
     const tt = team(t)
     add(tt.byUser, u.user || '(no user)', u.credits + u.qas)
     const w = wh(u.warehouse)
@@ -242,7 +243,7 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
   for (const [w, hours] of [...perWh].sort((a, b) => a[0].localeCompare(b[0]))) {
     hours.sort((a, b) => a - b)
     const W = wh(w)
-    const owner = cfg.owners[w]?.trim() || undefined
+    const owner = own(cfg.owners, w)?.trim() || undefined
     let lastActive: { hour: number; weights: Record<string, number> } | null = null
     const prior = priorActive.get(w)
     if (prior && cfg.idleMethod !== 'owner') lastActive = { hour: prior.hour, weights: idleWeights(cfg.idleMethod, prior.usage, owner) }
@@ -255,7 +256,7 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
       let A = 0
       for (const a of usage.values()) A += a.credits
       queriesTotal += A
-      const cell: Cell = { warehouse: w, hour, metered: M, query: {}, idle: {}, how: 'none' }
+      const cell: Cell = { warehouse: w, hour, metered: M, query: dict(), idle: dict(), how: 'none' }
 
       for (const [t, a] of usage) {
         if (a.credits <= 0 && a.qas <= 0) continue
@@ -306,7 +307,7 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
       if (C > 0) {
         meteredCloud += C
         W.cloud += C
-        const cw: Record<string, number> = {}
+        const cw = dict<number>()
         for (const [t, a] of usage) if (a.cloud > 0) cw[t] = a.cloud
         if (!Object.keys(cw).length) {
           for (const [t, v] of Object.entries(cell.query)) add(cw, t, v)
@@ -317,7 +318,7 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
           cw[owner ?? UNASSIGNED] = 1
           if (!owner) idleFix.set(w, (idleFix.get(w) ?? 0) + C)
         }
-        const rec = rawCloudByDay.get(day) ?? {}
+        const rec = rawCloudByDay.get(day) ?? dict<number>()
         for (const [t, v] of Object.entries(split(C, cw))) { add(rec, `${t}\u0001${w}`, v) }
         rawCloudByDay.set(day, rec)
       }
