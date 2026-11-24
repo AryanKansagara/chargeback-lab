@@ -62,8 +62,9 @@ test.describe('sample account', () => {
   test('idle credits with no team are listed as their own row', async ({ page }) => {
     await openSample(page, 'consolidated')
     const { teams, total } = await billByTeam(page)
-    expect(teams['Unassigned idle']).toMatchObject({ query: 0, idle: 763.0, credits: 763.0 })
-    expect(teams['Unmapped'].credits).toBe(1659.8)
+    // October opens with an idle tail from the end of September, which is carried to that team (0.99 cr moved off Unassigned).
+    expect(teams['Unassigned idle']).toMatchObject({ query: 0, idle: 762.0, credits: 762.0 })
+    expect(teams['Unmapped'].credits).toBe(1660.1)
     expect(total.credits).toBe(3743.2)
     expect(await billable(page)).toBeCloseTo(3743.2, 1)
   })
