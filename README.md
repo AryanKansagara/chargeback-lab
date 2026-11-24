@@ -29,4 +29,12 @@ npm test
 npm run build
 ```
 
+## Tests and CI
+
+- `npm test` runs the engine unit tests (Node's built-in runner).
+- `npm run test:e2e` builds the app and runs the Playwright (Chromium) suite in `e2e/` against that production build, served by `vite preview` on port 4173 (set `E2E_PORT` to use another). Each test starts with an empty browser profile, signed out; requests to anything other than the preview server (Supabase included) are blocked and fail the test, as does any uncaught page error. It imports the CSVs from `src/engine/fixtures`.
+- First run on a machine: `npx playwright install chromium` (add `--with-deps` on a fresh Linux box).
+
+GitHub Actions (`.github/workflows/ci.yml`) runs `npm ci`, build, unit tests and the E2E suite on Node 22 for every pull request and push to `main`, with read-only permissions. The Playwright browser is cached by the installed Playwright version.
+
 
