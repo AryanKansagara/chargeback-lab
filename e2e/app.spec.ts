@@ -240,6 +240,43 @@ test.describe('importing exports', () => {
   })
 })
 
+test.describe('discarding a pending file', () => {
+  test('a file with unrecognised columns can be discarded without picking a type', async ({ page }) => {
+    await page.goto('/app')
+    await page.getByRole('button', { name: 'Import your data' }).click()
+    await expect(page.getByText('No data yet')).toBeVisible()
+
+    await importFiles(page, [
+      { name: 'people.csv', mimeType: 'text/csv', buffer: Buffer.from('name,age\nAda,36\nGrace,45\n') },
+      { name: 'places.csv', mimeType: 'text/csv', buffer: Buffer.from('city,country\nOslo,NO\n') },
+    ])
+    const people = page.locator('.pending', { hasText: 'people.csv' })
+    const places = page.locator('.pending', { hasText: 'places.csv' })
+    await expect(people).toContainText('do not match any export we know')
+    await expect(people.getByRole('button', { name: 'Discard' })).toBeVisible()
+    await expect(people.getByRole('button', { name: /^Import/ })).toHaveCount(0)
+
+    // Discarding one card leaves the other, and nothing was imported.
+    await people.getByRole('button', { name: 'Discard' }).click()
+    await expect(people).toHaveCount(0)
+    await expect(places).toBeVisible()
+    await places.getByRole('button', { name: 'Discard' }).click()
+    await expect(page.locator('.pending')).toHaveCount(0)
+    await expect(page.getByText('No data yet')).toBeVisible()
+  })
+
+  test('a recognised file can still be discarded', async ({ page }) => {
+    await page.goto('/app')
+    await page.getByRole('button', { name: 'Import your data' }).click()
+    await importFiles(page, [ENGINE_FIXTURES[0]])
+    const card = page.locator('.pending', { hasText: 'warehouse_metering_snowsight.csv' })
+    await expect(card.getByRole('button', { name: /^Import 6 rows$/ })).toBeVisible()
+    await card.getByRole('button', { name: 'Discard' }).click()
+    await expect(page.locator('.pending')).toHaveCount(0)
+    await expect(page.getByText('No data yet')).toBeVisible()
+  })
+})
+
 test('every page loads without page errors or external requests', async ({ page }) => {
   for (const [path, heading] of [['/', 'Every Snowflake credit'], ['/docs', 'Getting the data out of Snowflake'], ['/settings', 'Settings'], ['/app', 'Projects'], ['/no/such/page', 'No warehouse at this address']] as const) {
     await page.goto(path)

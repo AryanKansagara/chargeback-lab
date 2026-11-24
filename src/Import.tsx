@@ -174,7 +174,14 @@ function PendingCard({ p, onChange, onCancel, onCommit }: { p: Pending; onChange
           </select>
         </label>
       </div>
-      {!p.kind ? <p className="warn-text small">The columns do not match any export we know. Pick the type and map the columns by hand, or check the SQL in the docs.</p> : (
+      {!p.kind ? (
+        <>
+          <p className="warn-text small">The columns do not match any export we know. Pick the type and map the columns by hand, or check the SQL in the docs.</p>
+          <div className="row end gap-sm">
+            <button type="button" className="btn ghost sm" onClick={onCancel}>Discard</button>
+          </div>
+        </>
+      ) : (
         <>
           <div className="mapping">
             {KINDS[p.kind].fields.map(f => (
