@@ -25,6 +25,8 @@ export function Link({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAncho
 // ---------- Formatting ----------
 
 export const fmtCr = (n: number, d = 1) => (Math.abs(n) < 0.5 * 10 ** -d ? 0 : n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
+/** Like fmtCr, but a non-zero amount too small for d decimals keeps two more, so tiny teams do not read as 0. */
+export const fmtCrSmall = (n: number, d = 1) => fmtCr(n, Math.abs(n) > 1e-9 && Math.abs(n) < 0.5 * 10 ** -d ? d + 2 : d)
 export const fmtUsd = (n: number, d = 0) => `${n < -0.5 * 10 ** -d ? '-' : ''}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })}`
 export const fmtPct = (n: number, d = 0) => `${(n * 100).toFixed(d)}%`
 export const fmtMonth = (m: string) => new Date(m + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
