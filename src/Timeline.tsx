@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Allocation, Cell } from './engine/allocate.ts'
 import { HOUR } from './engine/csv.ts'
 import { UNASSIGNED, UNMAPPED } from './engine/types.ts'
@@ -57,13 +57,15 @@ export function Timeline({ alloc, start, hours, color, teams, claimed, infos, co
               if (!c) return <div className="tl-col" key={h} />
               const idleTotal = sumv(c.idle)
               const unassigned = c.idle[UNASSIGNED] ?? 0
-              const pct = (v: number) => `${Math.min(100, (v / l.max) * 100)}%`
+              // A column never grows past its lane: if the hour holds more than the lane's nominal maximum, the scale stretches to fit.
+              const scale = Math.max(l.max, sumv(c.query) + idleTotal)
+              const pct = (v: number) => `${(v / scale) * 100}%`
               const delay = { transitionDelay: `${(i % 48) * 14}ms` }
               return (
                 <div className="tl-col" key={h} onMouseEnter={e => { const r = e.currentTarget.getBoundingClientRect(); setTip({ cell: c, x: r.left + r.width / 2, y: r.top }) }} onFocus={e => { const r = e.currentTarget.getBoundingClientRect(); setTip({ cell: c, x: r.left + r.width / 2, y: r.top }) }} tabIndex={compact ? -1 : 0}>
                   <div className="tl-stack">
-                    {order.map(t => c.query[t] ? <span key={'q' + t} className="seg q" style={{ height: pct(c.query[t]), background: color(t) }} /> : null)}
-                    {order.map(t => (c.idle[t] ?? 0) > 0 ? <span key={'i' + t} className="seg i" style={{ height: claimed ? pct(c.idle[t]) : '0%', background: color(t), ...delay }} /> : null)}
+                    {order.map(t => c.query[t] ? <span key={'q' + t} className={segClass('seg q', c.query[t], scale)} style={{ height: pct(c.query[t]), background: color(t) }} /> : null)}
+                    {order.map(t => (c.idle[t] ?? 0) > 0 ? <span key={'i' + t} className={segClass('seg i', claimed ? c.idle[t] : 0, scale)} style={{ height: claimed ? pct(c.idle[t]) : '0%', background: color(t), ...delay }} /> : null)}
                     <span className="seg raw" style={{ height: pct(claimed ? unassigned : idleTotal), ...delay }} />
                   </div>
                 </div>
@@ -85,6 +87,9 @@ export function Timeline({ alloc, start, hours, color, teams, claimed, infos, co
 
 const sumv = (o: Record<string, number>) => Object.values(o).reduce((a, b) => a + b, 0)
 
+/** Segments get a hairline gap above them only when they are tall enough to spare it, so many thin segments still add up to the hour's credits. */
+const segClass = (base: string, value: number, scale: number) => value / scale >= 0.05 ? `${base} gap` : base
+
 function tickLabel(h: number, hours: number) {
   const d = new Date(h)
   if (hours > 72) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -105,6 +110,18 @@ const HOW: Record<Cell['how'], string> = {
   none: 'No idle this hour',
 }
 
+const TIP_TEAMS = 4
+
+/** The biggest teams get a row each; the rest share one labelled row, so the tooltip stays on screen however many teams an hour holds. */
+function topRows(byTeam: Record<string, number>, row: (team: string, v: number) => ReactNode, kind: string) {
+  const sorted = Object.entries(byTeam).sort((a, b) => b[1] - a[1])
+  const rest = sorted.length > TIP_TEAMS + 1 ? sorted.slice(TIP_TEAMS) : []
+  return [
+    ...sorted.slice(0, rest.length ? TIP_TEAMS : sorted.length).map(([t, v]) => row(t, v)),
+    ...(rest.length ? [<div className="tip-row" key="\0more"><span>{rest.length} other teams ({kind})</span><b>{fmtCr(rest.reduce((a, [, v]) => a + v, 0), 2)}</b></div>] : []),
+  ]
+}
+
 function CellTip({ cell, x, y, color, claimed }: { cell: Cell; x: number; y: number; color(t: string): string; claimed: boolean }) {
   const idle = sumv(cell.idle)
   const d = new Date(cell.hour)
@@ -113,9 +130,9 @@ function CellTip({ cell, x, y, color, claimed }: { cell: Cell; x: number; y: num
     <div className="tip" style={style} role="tooltip">
       <div className="tip-head">{cell.warehouse} · {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} {String(d.getUTCHours()).padStart(2, '0')}:00 UTC</div>
       <div className="tip-row"><span>Metered</span><b>{fmtCr(cell.metered, 2)} cr</b></div>
-      {Object.entries(cell.query).sort((a, b) => b[1] - a[1]).map(([t, v]) => <div className="tip-row" key={t}><span><i className="dot" style={{ background: color(t) }} />{t} queries</span><b>{fmtCr(v, 2)}</b></div>)}
+      {topRows(cell.query, (t, v) => <div className="tip-row" key={t}><span><i className="dot" style={{ background: color(t) }} />{t} queries</span><b>{fmtCr(v, 2)}</b></div>, 'query')}
       {idle > 0 && (claimed
-        ? Object.entries(cell.idle).sort((a, b) => b[1] - a[1]).map(([t, v]) => <div className="tip-row" key={t}><span><i className="dot hatch" style={{ background: color(t) }} />{t} idle</span><b>{fmtCr(v, 2)}</b></div>)
+        ? topRows(cell.idle, (t, v) => <div className="tip-row" key={t}><span><i className="dot hatch" style={{ background: color(t) }} />{t} idle</span><b>{fmtCr(v, 2)}</b></div>, 'idle')
         : <div className="tip-row"><span><i className="dot hatch" style={{ background: 'var(--unassigned)' }} />Idle, no team</span><b>{fmtCr(idle, 2)}</b></div>)}
       {claimed && idle > 0 && <div className="tip-note">{HOW[cell.how]}</div>}
     </div>

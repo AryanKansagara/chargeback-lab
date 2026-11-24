@@ -265,8 +265,9 @@ main { min-height: 70vh; outline: none; }
 .timeline.compact .tl-track { height: 50px; }
 .tl-col { position: relative; display: flex; align-items: flex-end; min-width: 0; border-radius: 2px; outline-offset: 0; }
 .tl-col:hover { background: var(--accent-soft); }
-.tl-stack { width: 100%; height: 100%; display: flex; flex-direction: column-reverse; gap: 1px; }
+.tl-stack { width: 100%; height: 100%; display: flex; flex-direction: column-reverse; overflow: hidden; }
 .seg { display: block; width: 100%; border-radius: 2px; flex: none; transition: height .7s var(--ease); }
+.seg.gap { box-shadow: inset 0 1px 0 var(--bg-2); }
 .seg.i { background-image: repeating-linear-gradient(135deg, var(--hatch) 0 2px, transparent 2px 5px) !important; }
 .seg.raw { background: var(--unassigned) repeating-linear-gradient(135deg, var(--hatch) 0 2px, transparent 2px 5px); }
 .tl-axis { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; }
