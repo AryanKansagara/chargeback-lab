@@ -34,7 +34,9 @@ export function Timeline({ alloc, start, hours, color, teams, claimed, infos, co
       const info = infos?.find(i => i.name === w.name)
       const cells = byWh.get(w.name)!
       let max = info ? creditsPerHour(info.size, info.type) : NaN
-      if (!Number.isFinite(max)) max = Math.max(...[...cells.values()].map(c => Math.max(c.metered, sumv(c.query)))) || 1
+      const peak = Math.max(...[...cells.values()].map(c => Math.max(c.metered, sumv(c.query) + sumv(c.idle))))
+      // One scale per lane so hours stay comparable. It stretches when an hour holds more than the warehouse's nominal size (multi-cluster).
+      max = Number.isFinite(max) ? Math.max(max, peak) : peak || 1
       return { name: w.name, info, cells, max }
     })
   }, [alloc, start, hours, infos])
@@ -57,15 +59,13 @@ export function Timeline({ alloc, start, hours, color, teams, claimed, infos, co
               if (!c) return <div className="tl-col" key={h} />
               const idleTotal = sumv(c.idle)
               const unassigned = c.idle[UNASSIGNED] ?? 0
-              // A column never grows past its lane: if the hour holds more than the lane's nominal maximum, the scale stretches to fit.
-              const scale = Math.max(l.max, sumv(c.query) + idleTotal)
-              const pct = (v: number) => `${(v / scale) * 100}%`
+              const pct = (v: number) => `${(v / l.max) * 100}%`
               const delay = { transitionDelay: `${(i % 48) * 14}ms` }
               return (
                 <div className="tl-col" key={h} onMouseEnter={e => { const r = e.currentTarget.getBoundingClientRect(); setTip({ cell: c, x: r.left + r.width / 2, y: r.top }) }} onFocus={e => { const r = e.currentTarget.getBoundingClientRect(); setTip({ cell: c, x: r.left + r.width / 2, y: r.top }) }} tabIndex={compact ? -1 : 0}>
                   <div className="tl-stack">
-                    {order.map(t => c.query[t] ? <span key={'q' + t} className={segClass('seg q', c.query[t], scale)} style={{ height: pct(c.query[t]), background: color(t) }} /> : null)}
-                    {order.map(t => (c.idle[t] ?? 0) > 0 ? <span key={'i' + t} className={segClass('seg i', claimed ? c.idle[t] : 0, scale)} style={{ height: claimed ? pct(c.idle[t]) : '0%', background: color(t), ...delay }} /> : null)}
+                    {order.map(t => c.query[t] ? <span key={'q' + t} className={segClass('seg q', c.query[t], l.max)} style={{ height: pct(c.query[t]), background: color(t) }} /> : null)}
+                    {order.map(t => (c.idle[t] ?? 0) > 0 ? <span key={'i' + t} className={segClass('seg i', claimed ? c.idle[t] : 0, l.max)} style={{ height: claimed ? pct(c.idle[t]) : '0%', background: color(t), ...delay }} /> : null)}
                     <span className="seg raw" style={{ height: pct(claimed ? unassigned : idleTotal), ...delay }} />
                   </div>
                 </div>

@@ -66,3 +66,24 @@ for (const teams of [1, 10, 102, 500]) {
     else await expect(tip).not.toContainText('other teams')
   })
 }
+
+test('hours above the warehouse size stay inside the row and comparable with each other', async ({ page }) => {
+  const hour = (h: number, credits: number) => `2026-10-01 0${h}:00:00.000 +0000,2026-10-01 0${h + 1}:00:00.000 +0000,1,SHARED_WH,${credits},${credits},0,${credits}\n`
+  const query = (h: number, credits: number) => `q${h},,,1,SHARED_WH,h,p,"{""team"":""alpha""}",U,2026-10-01 0${h}:01:00.000 +0000,2026-10-01 0${h}:30:00.000 +0000,${credits},\n`
+  await page.goto('/app')
+  await page.getByRole('button', { name: 'Import your data' }).click()
+  await page.locator('input[type=file]').setInputFiles([
+    { name: 'metering.csv', mimeType: 'text/csv', buffer: Buffer.from(METERING.split('\n')[0] + '\n' + hour(0, 2) + hour(1, 4)) },
+    { name: 'attribution.csv', mimeType: 'text/csv', buffer: Buffer.from(ATTRIBUTION_HEADER + query(0, 2) + query(1, 4)) },
+    { name: 'warehouses.csv', mimeType: 'text/csv', buffer: Buffer.from('name,state,type,size,auto_suspend,auto_resume\nSHARED_WH,STARTED,STANDARD,X-Small,60,true\n') }, // X-Small is 1 credit an hour
+  ])
+  await page.getByRole('button', { name: 'Import all 3 files' }).click()
+  await page.getByRole('link', { name: 'Overview' }).click()
+  const track = page.locator('.tl-track').first()
+  await expect(page.locator('.tl-meta')).toContainText('X-Small')
+  await expect.poll(async () => {
+    const height = async (i: number) => (await track.locator('.tl-col').nth(i).locator('.seg').evaluateAll(els => els.reduce((a, e) => a + e.getBoundingClientRect().height, 0)))
+    const [two, four, lane] = [await height(0), await height(1), (await track.locator('.tl-stack').first().boundingBox())!.height]
+    return { ratio: Math.round(four / two * 10) / 10, fits: four <= lane + 0.5 }
+  }).toEqual({ ratio: 2, fits: true })
+})
