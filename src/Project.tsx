@@ -6,7 +6,7 @@ import { StackBar } from './charts.tsx'
 import { defaultMonth, financeCsv, METHODS, monthsIn, teamOrder, useAllocation, useProject } from './projectData.ts'
 import { uuid, type Project } from './store.ts'
 import { Timeline } from './Timeline.tsx'
-import { download, fmtCr, fmtDay, fmtMonth, fmtPct, fmtUsd, go, isTyping, Link, Modal, SyntheticBadge, TeamDot, teamColors, toast } from './ui.tsx'
+import { download, fmtCr, fmtCrSmall, fmtDay, fmtMonth, fmtPct, fmtUsd, go, isTyping, Link, Modal, SyntheticBadge, TeamDot, teamColors, toast } from './ui.tsx'
 
 const Rules = lazy(() => import('./Rules.tsx'))
 const Panels = lazy(() => import('./Panels.tsx'))
@@ -218,11 +218,11 @@ function Overview({ project, sliced, alloc, month, color, teams, onTab }: TabPro
                 return (
                   <tr key={t.team} className={t.team === UNMAPPED || t.team === UNASSIGNED ? 'row-bad' : ''}>
                     <th scope="row"><TeamDot color={color(t.team)} hatch={t.team === UNASSIGNED} />{t.team}</th>
-                    <td className="num">{fmtCr(t.query + t.qas)}</td>
-                    <td className="num">{fmtCr(t.idle)}</td>
-                    <td className="num">{fmtCr(t.cloud, 2)}</td>
-                    <td className="num">{fmtCr(t.serverless)}</td>
-                    <td className="num strong">{fmtCr(t.total)}</td>
+                    <td className="num">{fmtCrSmall(t.query + t.qas)}</td>
+                    <td className="num">{fmtCrSmall(t.idle)}</td>
+                    <td className="num">{fmtCrSmall(t.cloud, 2)}</td>
+                    <td className="num">{fmtCrSmall(t.serverless)}</td>
+                    <td className="num strong">{fmtCrSmall(t.total)}</td>
                     <td className="num strong">{fmtUsd(t.usd)}</td>
                     <td className="hide-sm share-cell"><StackBar label={`${t.team} composition`} total={maxTotal} parts={[
                       { key: 'q', value: t.query + t.qas, color: color(t.team), title: `Query ${fmtCr(t.query + t.qas)} cr` },
@@ -234,7 +234,7 @@ function Overview({ project, sliced, alloc, month, color, teams, onTab }: TabPro
                 )
               })}
             </tbody>
-            <tfoot><tr><th scope="row">Total allocated</th><td className="num">{fmtCr(alloc.teams.reduce((a, t) => a + t.query + t.qas, 0))}</td><td className="num">{fmtCr(idle)}</td><td className="num">{fmtCr(alloc.teams.reduce((a, t) => a + t.cloud, 0), 2)}</td><td className="num">{fmtCr(alloc.teams.reduce((a, t) => a + t.serverless, 0))}</td><td className="num strong">{fmtCr(r.allocated)}</td><td className="num strong">{fmtUsd(r.allocated * price)}</td><td className="hide-sm" /><td className="hide-sm" /></tr></tfoot>
+            <tfoot><tr><th scope="row">Total allocated</th><td className="num">{fmtCrSmall(alloc.teams.reduce((a, t) => a + t.query + t.qas, 0))}</td><td className="num">{fmtCrSmall(idle)}</td><td className="num">{fmtCrSmall(alloc.teams.reduce((a, t) => a + t.cloud, 0), 2)}</td><td className="num">{fmtCrSmall(alloc.teams.reduce((a, t) => a + t.serverless, 0))}</td><td className="num strong">{fmtCrSmall(r.allocated)}</td><td className="num strong">{fmtUsd(r.allocated * price)}</td><td className="hide-sm" /><td className="hide-sm" /></tr></tfoot>
           </table>
         </div>
         <div className="legend small"><span><i className="sw solid" /> Query</span><span><i className="sw stripe" /> Idle</span><span><i className="sw other" /> Cloud services + serverless</span></div>

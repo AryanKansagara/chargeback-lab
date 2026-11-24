@@ -56,6 +56,11 @@ export interface Dataset {
   usage: UsageRow[]
   daily: DailyRow[]
   warehouses: WarehouseInfo[]
+  /**
+   * Set by filterMonth: the query rows from before this slice began. They are never counted. allocate looks back
+   * carryHours into them, so an idle tail at the start of a month belongs to the same team as in the unsliced data.
+   */
+  before?: { start: number; usage: UsageRow[] }
 }
 
 export type RuleField = 'query_tag' | 'tag_key' | 'role' | 'user' | 'warehouse' | 'database' | 'service_type'

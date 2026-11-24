@@ -62,8 +62,9 @@ test.describe('sample account', () => {
   test('idle credits with no team are listed as their own row', async ({ page }) => {
     await openSample(page, 'consolidated')
     const { teams, total } = await billByTeam(page)
-    expect(teams['Unassigned idle']).toMatchObject({ query: 0, idle: 763.0, credits: 763.0 })
-    expect(teams['Unmapped'].credits).toBe(1659.8)
+    // October opens with an idle tail from the end of September, which is carried to that team (0.99 cr moved off Unassigned).
+    expect(teams['Unassigned idle']).toMatchObject({ query: 0, idle: 762.0, credits: 762.0 })
+    expect(teams['Unmapped'].credits).toBe(1660.1)
     expect(total.credits).toBe(3743.2)
     expect(await billable(page)).toBeCloseTo(3743.2, 1)
   })
@@ -237,6 +238,43 @@ test.describe('importing exports', () => {
     await page.locator('.pending', { hasText: 'warehouse_metering_snowsight.csv' }).getByRole('button', { name: /^Import 6 rows$/ }).click()
     await expect(page.getByText(/Imported 6 warehouse metering rows/)).toBeVisible()
     await expect(page.getByText('No data yet')).toHaveCount(0)
+  })
+})
+
+test.describe('discarding a pending file', () => {
+  test('a file with unrecognised columns can be discarded without picking a type', async ({ page }) => {
+    await page.goto('/app')
+    await page.getByRole('button', { name: 'Import your data' }).click()
+    await expect(page.getByText('No data yet')).toBeVisible()
+
+    await importFiles(page, [
+      { name: 'people.csv', mimeType: 'text/csv', buffer: Buffer.from('name,age\nAda,36\nGrace,45\n') },
+      { name: 'places.csv', mimeType: 'text/csv', buffer: Buffer.from('city,country\nOslo,NO\n') },
+    ])
+    const people = page.locator('.pending', { hasText: 'people.csv' })
+    const places = page.locator('.pending', { hasText: 'places.csv' })
+    await expect(people).toContainText('do not match any export we know')
+    await expect(people.getByRole('button', { name: 'Discard' })).toBeVisible()
+    await expect(people.getByRole('button', { name: /^Import/ })).toHaveCount(0)
+
+    // Discarding one card leaves the other, and nothing was imported.
+    await people.getByRole('button', { name: 'Discard' }).click()
+    await expect(people).toHaveCount(0)
+    await expect(places).toBeVisible()
+    await places.getByRole('button', { name: 'Discard' }).click()
+    await expect(page.locator('.pending')).toHaveCount(0)
+    await expect(page.getByText('No data yet')).toBeVisible()
+  })
+
+  test('a recognised file can still be discarded', async ({ page }) => {
+    await page.goto('/app')
+    await page.getByRole('button', { name: 'Import your data' }).click()
+    await importFiles(page, [ENGINE_FIXTURES[0]])
+    const card = page.locator('.pending', { hasText: 'warehouse_metering_snowsight.csv' })
+    await expect(card.getByRole('button', { name: /^Import 6 rows$/ })).toBeVisible()
+    await card.getByRole('button', { name: 'Discard' }).click()
+    await expect(page.locator('.pending')).toHaveCount(0)
+    await expect(page.getByText('No data yet')).toBeVisible()
   })
 })
 

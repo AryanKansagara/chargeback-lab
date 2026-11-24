@@ -81,6 +81,8 @@ export interface Allocation {
   method: IdleMethod
 }
 
+/** Floating-point dust, not a real amount of credits. */
+const NEGLIGIBLE = 1e-9
 const WAREHOUSE_SERVICES = new Set(['WAREHOUSE_METERING', 'WAREHOUSE_METERING_READER'])
 const add = (o: Record<string, number>, k: string, v: number) => { if (v) put(o, k, (own(o, k) ?? 0) + v) }
 const sum = (o: Record<string, number>) => Object.values(o).reduce((a, b) => a + b, 0)
@@ -118,15 +120,25 @@ export function months(ds: Dataset): string[] {
   return [...set].sort()
 }
 
+/**
+ * The rows of one month. The query rows from before the month come along as `before` (not counted), so allocate
+ * can carry an idle tail at the start of the month to the same team as in the unsliced data.
+ */
 export function filterMonth(ds: Dataset, month: string | null): Dataset {
   if (!month) return ds
   const inMonth = (t: number) => new Date(t).toISOString().startsWith(month)
-  return {
+  const out: Dataset = {
     meter: ds.meter.filter(m => inMonth(m.hour)),
     usage: ds.usage.filter(u => inMonth(u.hour)),
     daily: ds.daily.filter(d => d.day.startsWith(month)),
     warehouses: ds.warehouses,
   }
+  const start = Date.parse(`${month}-01T00:00:00Z`)
+  if (Number.isFinite(start)) {
+    const usage = ds.usage.filter(u => u.hour < start)
+    if (usage.length) out.before = { start, usage }
+  }
+  return out
 }
 
 export function allocate(ds: Dataset, cfg: Config): Allocation {
@@ -188,6 +200,30 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
     meterCells.set(key, c)
   }
 
+  // The last active hour per warehouse before this slice began, when the slice carries context rows.
+  // Nothing here is counted or creates a team; it only seeds the carry-forward below.
+  const priorActive = new Map<string, { hour: number; usage: Map<string, Agg> }>()
+  if (ds.before && cfg.carryHours > 0) {
+    const from = ds.before.start - cfg.carryHours * HOUR
+    const cells = new Map<string, { hour: number; usage: Map<string, Agg> }>()
+    for (const u of ds.before.usage) {
+      if (u.hour < from) continue
+      const t = teamOf(u)
+      const key = `${u.warehouse}\u0001${u.hour}`
+      let cell = cells.get(key)
+      if (!cell) cells.set(key, cell = { hour: u.hour, usage: new Map() })
+      let a = cell.usage.get(t)
+      if (!a) cell.usage.set(t, a = { credits: 0, qas: 0, exec: 0, cloud: 0, queries: 0 })
+      a.credits += u.credits; a.qas += u.qas; a.exec += u.execMs; a.cloud += u.cloud; a.queries += u.queries
+    }
+    for (const [key, cell] of cells) {
+      const w = key.split('\u0001')[0]
+      let A = 0
+      for (const a of cell.usage.values()) A += a.credits
+      if (A > 0 && cell.hour > (priorActive.get(w)?.hour ?? -Infinity)) priorActive.set(w, cell)
+    }
+  }
+
   // 3. Walk every warehouse-hour in time order so pure-idle hours can inherit the last active split.
   const keys = new Set([...usageCells.keys(), ...meterCells.keys()])
   const perWh = new Map<string, number[]>()
@@ -209,6 +245,8 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
     const W = wh(w)
     const owner = own(cfg.owners, w)?.trim() || undefined
     let lastActive: { hour: number; weights: Record<string, number> } | null = null
+    const prior = priorActive.get(w)
+    if (prior && cfg.idleMethod !== 'owner') lastActive = { hour: prior.hour, weights: idleWeights(cfg.idleMethod, prior.usage, owner) }
     for (const hour of hours) {
       const key = `${w}\u0001${hour}`
       const usage = usageCells.get(key) ?? new Map<string, Agg>()
@@ -369,13 +407,14 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
   const meteredCloudBilled = meteredCloud + cloudAdjustment
   const billable = meteredCompute + meteredCloudBilled + serverless
   const days = [...new Set(cells.map(c => dayOf(c.hour)).concat(ds.daily.map(d => d.day)))].sort()
-  const teams = [...teamMap.values()].filter(t => Math.abs(t.total) >= 0.05).sort((a, b) => b.total - a.total)
+  // Every team with credits is kept, however small: dropping them made the rows add up to less than `allocated`.
+  const teams = [...teamMap.values()].filter(t => Math.abs(t.total) > NEGLIGIBLE).sort((a, b) => b.total - a.total)
 
   return {
     teams,
     warehouses: [...whMap.values()].sort((a, b) => b.metered - a.metered),
     cells,
-    fixes: [...fixMap.values()].filter(f => f.credits >= 0.05).sort((a, b) => b.credits - a.credits),
+    fixes: [...fixMap.values()].filter(f => f.credits > NEGLIGIBLE).sort((a, b) => b.credits - a.credits),
     recon: {
       meteredCompute, meteredCloud, cloudAdjustment, cloudEstimated, serverless, billable, allocated,
       residual: billable - allocated,

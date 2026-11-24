@@ -356,7 +356,8 @@ test('round trip: the docs-shaped CSV exports import back to the same bill', () 
     assert.equal(v.issues.length, 0)
     back = mergeRows(back, kind, v.rows)
   }
-  const a = allocate(oct, sCfg), b = allocate(back, sCfg)
+  // The CSVs hold only October's rows, so compare with October alone, not with the September context filterMonth adds.
+  const a = allocate({ ...oct, before: undefined }, sCfg), b = allocate(back, sCfg)
   for (const t of a.teams) close(b.teams.find(x => x.team === t.team)!.total, t.total, 1e-3)
   close(b.recon.residual, 0, 1e-3)
 })

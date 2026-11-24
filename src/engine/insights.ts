@@ -337,7 +337,7 @@ export function compare(a: Snapshot, b: Snapshot): TeamChange[] {
   const zero: SnapshotTeam = { team: '', query: 0, qas: 0, idle: 0, cloud: 0, serverless: 0, total: 0, usd: 0, byWarehouse: {}, byUser: {} }
   const out: TeamChange[] = []
   for (const name of names) {
-    if (Math.max(a.teams.find(t => t.team === name)?.total ?? 0, b.teams.find(t => t.team === name)?.total ?? 0) < 0.05) continue
+    if (Math.max(Math.abs(a.teams.find(t => t.team === name)?.total ?? 0), Math.abs(b.teams.find(t => t.team === name)?.total ?? 0)) <= 1e-9) continue
     const x = a.teams.find(t => t.team === name) ?? zero
     const y = b.teams.find(t => t.team === name) ?? zero
     const parts = ([
