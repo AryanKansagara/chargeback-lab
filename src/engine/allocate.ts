@@ -80,6 +80,8 @@ export interface Allocation {
   method: IdleMethod
 }
 
+/** Floating-point dust, not a real amount of credits. */
+const NEGLIGIBLE = 1e-9
 const WAREHOUSE_SERVICES = new Set(['WAREHOUSE_METERING', 'WAREHOUSE_METERING_READER'])
 const add = (o: Record<string, number>, k: string, v: number) => { if (v) o[k] = (o[k] ?? 0) + v }
 const sum = (o: Record<string, number>) => Object.values(o).reduce((a, b) => a + b, 0)
@@ -368,13 +370,14 @@ export function allocate(ds: Dataset, cfg: Config): Allocation {
   const meteredCloudBilled = meteredCloud + cloudAdjustment
   const billable = meteredCompute + meteredCloudBilled + serverless
   const days = [...new Set(cells.map(c => dayOf(c.hour)).concat(ds.daily.map(d => d.day)))].sort()
-  const teams = [...teamMap.values()].filter(t => Math.abs(t.total) >= 0.05).sort((a, b) => b.total - a.total)
+  // Every team with credits is kept, however small: dropping them made the rows add up to less than `allocated`.
+  const teams = [...teamMap.values()].filter(t => Math.abs(t.total) > NEGLIGIBLE).sort((a, b) => b.total - a.total)
 
   return {
     teams,
     warehouses: [...whMap.values()].sort((a, b) => b.metered - a.metered),
     cells,
-    fixes: [...fixMap.values()].filter(f => f.credits >= 0.05).sort((a, b) => b.credits - a.credits),
+    fixes: [...fixMap.values()].filter(f => f.credits > NEGLIGIBLE).sort((a, b) => b.credits - a.credits),
     recon: {
       meteredCompute, meteredCloud, cloudAdjustment, cloudEstimated, serverless, billable, allocated,
       residual: billable - allocated,
